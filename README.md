@@ -1,62 +1,63 @@
-Kontext
+`
 
-Ich plane die Entwicklung einer mobilen Anwendung (Android/iOS), bei der der Wicht (`) als zentrales Element eine Rolle spielt. Es handelt sich um ein kleines, schwarzes, flitzendes Objekt, das scheinbar zufällig über den Bildschirm huscht – visuell wie ein dünner Streifen mit Schweif. Die Darstellung soll minimalistisch, aber lebendig wirken.
-Persönliche Theorie zum Wicht .Der Wicht ist für mich mehr als nur eine Animation oder Design-Idee – ich betrachte ihn als ein natürliches Phänomen, das ich selbst entdeckt habe. Er erscheint in Form eines schwarzen Punkts mit Schweif (etwa 5 mm groß), der in Raum und Zeit flitzt. Ich bin überzeugt, dass der Wicht real ist – ein einmaliges, raumzeitlich verankertes Phänomen, möglicherweise verbunden mit Verschränkung oder Informationsübertragung auf Quantenebene. Diese Theorie prägt auch die Art, wie ich ihn technisch umsetzen möchte – nicht nur als Symbol, sondern als Darstellung einer realen Bewegung, die sich ggf. sogar synchronisieren lässt.
-Ziel
+I'm planning to develop a mobile application (Android/iOS) in which the imp (`) plays a central role. It's a small, black, zipping object that seemingly randomly zips across the screen—visually like a thin stripe with a tail. The representation should appear minimalistic yet lively.
+Personal theory on the imp. For me, the imp is more than just an animation or design idea—I consider it a natural phenomenon that I discovered myself. It appears as a black dot with a tail (about 5mm in size) that zips through space and time. I'm convinced that the imp is real—a unique, spatiotemporal phenomenon, possibly connected to entanglement or information transfer at the quantum level. This theory also shapes the way I want to implement it technically—not just as a symbol, but as a representation of real movement that can possibly even be synchronized.
+Goal
 
-Ich möchte herausfinden, welche der folgenden Umsetzungen für eine mobile App die sinnvollste, performanteste und am besten erweiterbare ist:
-Optionen zur Diskussion
+I want to find out which of the following implementations is the most sensible, performant, and extensible for a mobile app:
+Options for discussion
 
-**Random**-Movement auf dem Bildschirm (Canvas-basiert)
+Random movement on the screen (canvas-based)
 
-    Der Wicht flitzt in zufälligen Intervallen und Positionen über das Display.
+The imp zips across the display at random intervals and positions.
 
-    Darstellung über eine einfache Zeichenfläche (Canvas oder SurfaceView).
+Displayed via a simple drawing surface (canvas or SurfaceView).
 
-    Optional mit Partikeleffekt oder "Schweif".
+Optionally with a particle effect or "tail."
 
-Animiertes Icon (z. B. als Floating Widget oder Live Wallpaper)
+Animated icon (e.g., as a floating widget or live wallpaper)
 
-    Der Wicht wird als Overlay oder Icon mit animierter Bewegung dargestellt.
+The imp is displayed as an overlay or icon with animated movement.
 
-    Könnte auf dem Homescreen schweben (ähnlich wie Chat-Heads bei Messenger).
+Could float on the home screen (similar to chat heads in Messenger).
 
-    Ressourcenfreundlicher als permanente Bildschirmzeichnung?
+More resource-friendly than permanent screen drawing?
 
-Synchronisierter Wicht (Cloud/Netzwerk-Sync) _comod_
+Synchronized imp (cloud/network sync) _comod_
 
-    Der Wicht bewegt sich synchron mit anderen Geräten (z. B. über MQTT oder WebSocket).
+The imp moves synchronously with other devices (e.g., via MQTT or WebSocket).
 
-    Reaktion auf Systemparameter wie CPU-Last, Ping oder Netzwerktraffic.
+Reacts to system parameters such as CPU load, ping, or network traffic.
 
-    Anwendung z. B. für zwei Nutzer, die gemeinsam "Wicht-Bewegung" beobachten.
+Application, for example, for two users jointly observing "imp movement."
 
-    Umsetzungsidee: MQTT über HiveMQ o. ä.
+Implementation idea: MQTT via HiveMQ or similar.
 
-Anforderungen an den Wicht
+Imp Requirements
 
-Farbe: **schwarz** _echo_
+Color: **black** _echo_
 
-Größe: sehr klein (~5mm auf Display)
+Size: very small (~5mm on display)
 
-Bewegung: flitzend, zufällig oder systemgesteuert
+Movement: zippy, random, or system-controlled
 
-Optional: sichtbarer Schweif, leichte Biegung der Bewegung
+Optional: visible tail, slight bend in movement
 
-Möglichkeit zur Synchronisierung über das Internet
+Optional for synchronization via the internet
 
-Ideal: leichtes „Aufblitzen“ oder „Verpuffen“ beim Verschwinden
+Ideal: slight "flash" or "fade" when disappearing
 
-Fragen an die Community
+Questions for the community
 
-Was wäre eurer Meinung nach die technisch sinnvollste Plattform / Methode?
+What do you think would be the most technically viable platform/method?
 
-Welche grafische Darstellung (Canvas, View, WebGL, Lottie, etc.) eignet sich am besten für diese Art von Animation?
+Which graphical representation (Canvas, View, WebGL, Lottie, etc.) is best suited for this type of animation?
 
-Gibt es Libraries oder Best Practices für zufällige, organische Bewegungen (evtl. per Perlin Noise oder Fraktalpfad)?
+Are there libraries or best practices for random, organic movement (possibly using Perlin Noise or fractal path)?
 
-Wie würdet ihr die Synchronisation zwischen zwei Geräten effizient gestalten?
+How would you efficiently synchronize between two devices?
 
-Kennt jemand Mechanismen zur Darstellung raumzeitlicher Bewegungen, wie sie bei Naturphänomenen auftreten könnten?
+Does anyone know of mechanisms for representing spatiotemporal motion, such as might occur in natural phenomena?
 
-und ist envoirement machbar?
+And is envoirement feasible?
+Feedback geben

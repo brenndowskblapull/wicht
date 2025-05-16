@@ -1,0 +1,64 @@
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle, Line
+from kivy.clock import Clock
+import random
+import math
+
+class WichtSimulation(Widget):
+    def __init__(self, **kwargs):
+        super(WichtSimulation, self).__init__(**kwargs)
+        self.flitz_timer = 0
+        self.flitz_delay = 8
+        self.wicht_line = None
+        self.length = 5
+        self.start_x = self.start_y = self.end_x = self.end_y = 0
+        Clock.schedule_interval(self.update, 1.0/60.0)  # 60 FPS
+
+    def update(self, dt):
+        # Zuerst den gesamten Hintergrund weiß füllen
+        self.canvas.clear()
+        with self.canvas:
+            Color(1, 1, 1, 1)  # Weiß
+            Rectangle(pos=self.pos, size=self.size)
+        
+        # Aktualisiere den Timer
+        if self.flitz_timer > 0:
+            self.flitz_timer -= 1
+        else:
+            self.wicht_line = None
+
+        # Erzeuge einen neuen Wicht, falls keiner vorhanden ist
+        if self.wicht_line is None:
+            self.start_x = random.randint(50, int(self.width) - 50)
+            self.start_y = random.randint(50, int(self.height) - 50)
+            is_curve = random.choice([True, False])
+            if is_curve:
+                curve_angle = random.uniform(-0.2, 0.2)
+                curve_length = random.randint(10, 30)
+                self.end_x = self.start_x + curve_length * math.cos(curve_angle)
+                self.end_y = self.start_y + curve_length * math.sin(curve_angle)
+            else:
+                self.length = random.randint(10, 30)
+                angle = random.uniform(0, 2 * math.pi)
+                self.end_x = self.start_x + self.length * math.cos(angle)
+                self.end_y = self.start_y + self.length * math.sin(angle)
+            self.wicht_line = [(self.start_x, self.start_y), (self.end_x, self.end_y)]
+            self.flitz_timer = self.flitz_delay
+
+        # Zeichne den schwarzen Wicht
+        if self.wicht_line:
+            shrink_factor = (self.flitz_delay - self.flitz_timer) / (self.flitz_delay / 4)
+            current_end_x = int(self.wicht_line[1][0] + (self.start_x - self.wicht_line[1][0]) * shrink_factor)
+            current_end_y = int(self.wicht_line[1][1] + (self.start_y - self.wicht_line[1][1]) * shrink_factor)
+            with self.canvas:
+                Color(0, 0, 0, 1)  # Schwarz
+                Line(points=[self.wicht_line[0][0], self.wicht_line[0][1],
+                             current_end_x, current_end_y], width=2)
+
+class WichtApp(App):
+    def build(self):
+        return WichtSimulation()
+
+if __name__ == "__main__":
+    WichtApp().run()

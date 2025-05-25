@@ -8,37 +8,29 @@ import random
 import math
 import subprocess
 import platform
-import time
-
 
 class WichtSimulation(Widget):
     def __init__(self, sync_mode="none", **kwargs):
         super(WichtSimulation, self).__init__(**kwargs)
-        self.sync_mode = sync_mode
+        self.sync_mode = sync_mode  # "cpu", "ping", or "none"
         self.flitz_timer = 0
         self.flitz_delay = 6
         self.wicht_line = None
         self.sync_value = 0
-        self.time_base = time.time()
         Clock.schedule_interval(self.update_sync, 1.0)
         Clock.schedule_interval(self.update, 1.0 / 60.0)
 
     def update_sync(self, dt):
         if self.sync_mode == "cpu":
             self.sync_value = self.get_cpu_load()
-            scaled = 12 - int((min(self.sync_value, 100) / 100.0) * 9)
-            self.flitz_delay = max(3, min(12, scaled))
-
         elif self.sync_mode == "ping":
             self.sync_value = self.get_ping_ms()
+
+        if self.sync_mode in ["cpu", "ping"]:
             scaled = 12 - int((min(self.sync_value, 100) / 100.0) * 9)
             self.flitz_delay = max(3, min(12, scaled))
-
         elif self.sync_mode == "none":
-            t = time.time() - self.time_base
-            sinus = math.sin(t * 0.5)
-            dynamic = 6 + 4 * sinus
-            self.flitz_delay = max(2, int(dynamic))
+            self.flitz_delay = 6
 
     def get_cpu_load(self):
         try:
@@ -54,6 +46,7 @@ class WichtSimulation(Widget):
                     cpu_data = list(map(int, first.strip().split()[1:]))
                     idle1 = cpu_data[3]
                     total1 = sum(cpu_data)
+                import time
                 time.sleep(0.1)
                 with open('/proc/stat', 'r') as f:
                     second = f.readline()
@@ -92,14 +85,14 @@ class WichtSimulation(Widget):
         if self.wicht_line is None:
             self.start_x = random.randint(50, int(self.width) - 50)
             self.start_y = random.randint(50, int(self.height) - 50)
-            if random.random() < 0.8:  # 80% Wahrscheinlichkeit für Bogen
-                curve_angle = random.uniform(-1.2, 1.2)
-                curve_length = random.randint(30, 70)
+            if random.random() < 0.7:  # häufiger gebogen
+                curve_angle = random.uniform(-1.0, 1.0)
+                curve_length = random.randint(8, 25)  # maximal 5 mm (~25 px)
                 self.end_x = self.start_x + curve_length * math.cos(curve_angle)
                 self.end_y = self.start_y + curve_length * math.sin(curve_angle)
             else:
                 angle = random.uniform(0, 2 * math.pi)
-                length = random.randint(20, 60)
+                length = random.randint(8, 25)  # maximal 5 mm
                 self.end_x = self.start_x + length * math.cos(angle)
                 self.end_y = self.start_y + length * math.sin(angle)
             self.wicht_line = [(self.start_x, self.start_y), (self.end_x, self.end_y)]
@@ -112,8 +105,7 @@ class WichtSimulation(Widget):
             with self.canvas:
                 Color(0, 0, 0, 1)
                 Line(points=[self.wicht_line[0][0], self.wicht_line[0][1],
-                             current_end_x, current_end_y], width=0.5)
-
+                             current_end_x, current_end_y], width=0.3)  # noch dünner
 
 class WichtSelector(BoxLayout):
     def __init__(self, **kwargs):
@@ -129,11 +121,9 @@ class WichtSelector(BoxLayout):
         self.clear_widgets()
         self.add_widget(WichtSimulation(sync_mode=mode))
 
-
 class WichtApp(App):
     def build(self):
         return WichtSelector()
-
 
 if __name__ == "__main__":
     WichtApp().run()

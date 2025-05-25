@@ -1,0 +1,90 @@
+@echo off
+setlocal EnableDelayedExpansion
+color F0
+
+:: Wicht-Zeichen definieren
+set z0=,
+set z1=-
+set z2=`
+
+:: Anfangsgeschwindigkeit in Millisekunden
+set "speed=200"
+set "sync=0"
+
+:: Cursor ausblenden
+<nul set /p=[?25l
+
+:mainloop
+cls
+echo WICHT FLITZT!
+echo ----------------------------------------
+echo [1] Ultra (20 ms)
+echo [2] Schnell (50 ms)
+echo [3] Mittel (200 ms)
+echo [4] Langsam (600 ms)
+echo [5] Sehr langsam (1200 ms)
+echo [S] System-Sync (CPU-gesteuert)
+echo [Q] Beenden
+echo.
+echo choose
+
+choice /c 12345SQ /n >nul
+set "choice=%errorlevel%"
+
+set "sync=0"
+if "%choice%"=="1" set "speed=20"
+if "%choice%"=="2" set "speed=50"
+if "%choice%"=="3" set "speed=200"
+if "%choice%"=="4" set "speed=600"
+if "%choice%"=="5" set "speed=1200"
+if "%choice%"=="6" set "sync=1"
+if "%choice%"=="7" goto ende
+
+cls
+
+:: Flitzschleife
+:flitz
+:: Bei Systemsync: CPU-Last holen und daraus speed berechnen
+if "!sync!"=="1" (
+    for /f "skip=1 tokens=1" %%C in ('wmic cpu get loadpercentage') do (
+        if not defined cpuLoad set "cpuLoad=%%C"
+    )
+    set /a speed = 1200 - (!cpuLoad! * 10)
+    if !speed! lss 50 set speed=50
+    set "cpuLoad="
+)
+
+:: Position & Symbol
+set /a "x=(!random! %% 80) + 1"
+set /a "y=(!random! %% 25) + 1"
+set /a "z=(!random! %% 3)"
+if "!z!"=="0" set "sym=%z0%"
+if "!z!"=="1" set "sym=%z1%"
+if "!z!"=="2" set "sym=%z2%"
+
+cls
+
+:: Cursor setzen und Symbol anzeigen
+call :setCursor !y! !x!
+<nul set /p=!sym!
+
+:: Pause nach Geschwindigkeit
+ping -n 1 -w !speed! 127.0.0.1 >nul
+
+:: Tastendruck prüfen (non-blocking)
+choice /c 12345SQ /n /t 0 /d 0 >nul 2>nul
+if not errorlevel 255 (
+    goto mainloop
+)
+
+goto flitz
+
+:setCursor
+<nul set /p=[%1;%2H
+exit /b
+
+:ende
+<nul set /p=[?25h
+color 07
+cls
+pause

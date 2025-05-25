@@ -1,3 +1,6 @@
+
+BATCH-SKRIPT ##########################################################
+
 @echo off
 setlocal EnableDelayedExpansion
 color F0
@@ -88,3 +91,112 @@ exit /b
 color 07
 cls
 pause
+
+
+###############################################################################
+
+
+
+SHELL SKRIPT $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
+#!/bin/bash
+
+# Wicht-Zeichen definieren
+zeichen=( "," "-" "\`" )
+
+# Anfangsgeschwindigkeit in ms
+speed=200
+sync=0
+
+# Terminal vorbereiten: Cursor aus, weißer Hintergrund, schwarzer Text
+tput civis
+echo -ne "\033[47;30m" # Weißer Hintergrund (47), schwarzer Text (30)
+
+# Funktion: Cursorposition setzen
+set_cursor() {
+    tput cup "$1" "$2"
+}
+
+# Funktion: CPU-Auslastung holen
+get_cpu_load() {
+    if command -v mpstat &>/dev/null; then
+        # Linux mit mpstat
+        idle=$(mpstat 1 1 | awk '/Average/ {print 100 - $NF}')
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        idle=$(top -l 1 | awk '/CPU usage/ {gsub("%",""); print 100 - $7}')
+    else
+        idle=50
+    fi
+    echo ${idle%.*}
+}
+
+# Hauptmenü
+while true; do
+    clear
+    echo "WICHT FLITZT!"
+    echo "----------------------------------------"
+    echo "[1] Ultra (20 ms)"
+    echo "[2] Schnell (50 ms)"
+    echo "[3] Mittel (200 ms)"
+    echo "[4] Langsam (600 ms)"
+    echo "[5] Sehr langsam (1200 ms)"
+    echo "[S] System-Sync (CPU-gesteuert)"
+    echo "[Q] Beenden"
+    echo
+    echo -n "choose: "
+    read -rsn1 key
+
+    sync=0
+    case "$key" in
+        1) speed=20 ;;
+        2) speed=50 ;;
+        3) speed=200 ;;
+        4) speed=600 ;;
+        5) speed=1200 ;;
+        [Ss]) sync=1 ;;
+        [Qq]) break ;;
+        *) continue ;;
+    esac
+
+    # Flitzmodus
+    while true; do
+        if [ "$sync" -eq 1 ]; then
+            cpu_load=$(get_cpu_load)
+            speed=$((1200 - cpu_load * 10))
+            [ "$speed" -lt 50 ] && speed=50
+        fi
+
+        cols=$(tput cols)
+        lines=$(tput lines)
+        x=$((RANDOM % cols))
+        y=$((RANDOM % lines))
+        z=$((RANDOM % 3))
+        sym=${zeichen[$z]}
+
+        clear
+        set_cursor "$y" "$x"
+        echo -ne "$sym"
+
+        # Wartezeit
+        sleep $(awk "BEGIN {print $speed/1000}")
+
+        # Tastenabfrage ohne Enter
+        read -t 0.001 -rsn1 newkey
+        if [[ "$newkey" =~ [1-5SsQq] ]]; then
+            break
+        fi
+    done
+done
+
+# Cursor zurück, Farben zurücksetzen
+tput cnorm
+echo -ne "\033[0m"
+clear
+
+
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+

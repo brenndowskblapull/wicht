@@ -1,5 +1,5 @@
 
-#########################################################  BATCH-SKRIPT ` ###############################################################################
+#########################################################  WICHT.bat ###############################################################################
 
 @echo off
 setlocal EnableDelayedExpansion
@@ -97,7 +97,7 @@ pause
 
 
 
-##############################################################  SHELL SKRIPT ` #########################################################################
+##############################################################  WICHT.sh #########################################################################
 
 
 #!/bin/bash
@@ -198,7 +198,142 @@ clear
 ################################################################################################################################################################
 
 
-##################################################################  WICHT_TASK_MOD  ############################################################################
+############################################################# WICHT_VISUAL.py ##################################################################################
+
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle, Line
+from kivy.clock import Clock
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+import random
+import math
+import subprocess
+import platform
+
+class WichtSimulation(Widget):
+    def __init__(self, sync_mode="none", **kwargs):
+        super(WichtSimulation, self).__init__(**kwargs)
+        self.sync_mode = sync_mode  # "cpu", "ping", or "none"
+        self.flitz_timer = 0
+        self.flitz_delay = 6
+        self.wicht_line = None
+        self.sync_value = 0
+        Clock.schedule_interval(self.update_sync, 1.0)
+        Clock.schedule_interval(self.update, 1.0 / 60.0)
+
+    def update_sync(self, dt):
+        if self.sync_mode == "cpu":
+            self.sync_value = self.get_cpu_load()
+        elif self.sync_mode == "ping":
+            self.sync_value = self.get_ping_ms()
+
+        if self.sync_mode in ["cpu", "ping"]:
+            scaled = 12 - int((min(self.sync_value, 100) / 100.0) * 9)
+            self.flitz_delay = max(3, min(12, scaled))
+        elif self.sync_mode == "none":
+            self.flitz_delay = 6
+
+    def get_cpu_load(self):
+        try:
+            if platform.system() == "Windows":
+                output = subprocess.check_output("wmic cpu get loadpercentage", shell=True)
+                lines = output.decode().splitlines()
+                for line in lines:
+                    if line.strip().isdigit():
+                        return int(line.strip())
+            elif platform.system() == "Linux":
+                with open('/proc/stat', 'r') as f:
+                    first = f.readline()
+                    cpu_data = list(map(int, first.strip().split()[1:]))
+                    idle1 = cpu_data[3]
+                    total1 = sum(cpu_data)
+                import time
+                time.sleep(0.1)
+                with open('/proc/stat', 'r') as f:
+                    second = f.readline()
+                    cpu_data = list(map(int, second.strip().split()[1:]))
+                    idle2 = cpu_data[3]
+                    total2 = sum(cpu_data)
+                idle = idle2 - idle1
+                total = total2 - total1
+                return int(100 * (1.0 - idle / total))
+        except:
+            return 0
+
+    def get_ping_ms(self):
+        try:
+            param = "-n" if platform.system() == "Windows" else "-c"
+            output = subprocess.check_output(["ping", param, "1", "8.8.8.8"])
+            text = output.decode(errors="ignore")
+            for line in text.splitlines():
+                if "time=" in line:
+                    ms = line.split("time=")[1].split()[0].replace("ms", "").replace(" ", "")
+                    return min(100, int(float(ms)))
+        except:
+            return 100
+
+    def update(self, dt):
+        self.canvas.clear()
+        with self.canvas:
+            Color(1, 1, 1, 1)
+            Rectangle(pos=self.pos, size=self.size)
+
+        if self.flitz_timer > 0:
+            self.flitz_timer -= 1
+        else:
+            self.wicht_line = None
+
+        if self.wicht_line is None:
+            self.start_x = random.randint(50, int(self.width) - 50)
+            self.start_y = random.randint(50, int(self.height) - 50)
+            if random.random() < 0.7:  # häufiger gebogen
+                curve_angle = random.uniform(-1.0, 1.0)
+                curve_length = random.randint(8, 25)  # maximal 5 mm (~25 px)
+                self.end_x = self.start_x + curve_length * math.cos(curve_angle)
+                self.end_y = self.start_y + curve_length * math.sin(curve_angle)
+            else:
+                angle = random.uniform(0, 2 * math.pi)
+                length = random.randint(8, 25)  # maximal 5 mm
+                self.end_x = self.start_x + length * math.cos(angle)
+                self.end_y = self.start_y + length * math.sin(angle)
+            self.wicht_line = [(self.start_x, self.start_y), (self.end_x, self.end_y)]
+            self.flitz_timer = self.flitz_delay
+
+        if self.wicht_line:
+            shrink_factor = (self.flitz_delay - self.flitz_timer) / (self.flitz_delay / 4)
+            current_end_x = self.wicht_line[1][0] + (self.start_x - self.wicht_line[1][0]) * shrink_factor
+            current_end_y = self.wicht_line[1][1] + (self.start_y - self.wicht_line[1][1]) * shrink_factor
+            with self.canvas:
+                Color(0, 0, 0, 1)
+                Line(points=[self.wicht_line[0][0], self.wicht_line[0][1],
+                             current_end_x, current_end_y], width=0.3)  # noch dünner
+
+class WichtSelector(BoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = "vertical"
+        self.spacing = 10
+        self.padding = 50
+        self.add_widget(Button(text="Sync mit CPU-Last", on_press=lambda x: self.start("cpu")))
+        self.add_widget(Button(text="Sync mit Ping", on_press=lambda x: self.start("ping")))
+        self.add_widget(Button(text="Freies Flitzen", on_press=lambda x: self.start("none")))
+
+    def start(self, mode):
+        self.clear_widgets()
+        self.add_widget(WichtSimulation(sync_mode=mode))
+
+class WichtApp(App):
+    def build(self):
+        return WichtSelector()
+
+if __name__ == "__main__":
+    WichtApp().run()
+
+###############################################################################################################################################################
+
+
+##################################################################  WICHT_TASK_MOD.py  ############################################################################
 
 import pygame
 import random

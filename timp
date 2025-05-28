@@ -202,42 +202,40 @@ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
 WICHT_TASK_MOD############
 
-
 import pygame
 import random
 import math
 import time
 import threading
 import psutil
-import subprocess
 from pystray import Icon, MenuItem, Menu
 from PIL import Image
 from ping3 import ping
 
-# Fenstergröße und Farben
-WIDTH, HEIGHT = 100, 100
+# --- Konfiguration ---
+WIDTH, HEIGHT = 64, 64  # Icon-Größe
 ICON_SIZE = (WIDTH, HEIGHT)
-BLACK = (0, 0, 0)
 TRANSPARENT = (0, 0, 0, 0)
 
-# Wicht-Parameter
+# --- Zustand ---
 flitz_timer = 0
 wicht_line = None
-line_thickness = 8
 flitz_delay = 6
-pause_delay = 10  # Standardverzögerung
+pause_delay = 10
+mode = 0  # 0 = Zufall, 1 = CPU, 2 = Ping
+color = (0, 0, 0)  # Startfarbe: Schwarz
 
-# Modus: 0 = Zufällig, 1 = CPU, 2 = Ping
-mode = 0
-
-# Pygame Oberfläche
+# --- pygame Setup ---
 pygame.init()
 screen = pygame.Surface(ICON_SIZE, pygame.SRCALPHA)
 
-# Icon-Setup
+# --- Tray Icon Setup ---
 def create_image():
     return Image.new("RGBA", ICON_SIZE, TRANSPARENT)
 
+icon = Icon("Wicht", create_image())
+
+# --- Datenquellen ---
 def get_cpu_load():
     return psutil.cpu_percent(interval=0.1)
 
@@ -248,31 +246,32 @@ def get_ping_delay():
     except:
         return 1
 
-def update_icon(icon):
-    global flitz_timer, wicht_line, pause_delay
+# --- Update Tray Icon ---
+def update_icon():
+    global flitz_timer, wicht_line, pause_delay, color
 
     screen.fill(TRANSPARENT)
 
-    # Timer-Logik
     if flitz_timer > 0:
         flitz_timer -= 1
-    elif wicht_line is not None:
+    elif wicht_line:
         wicht_line = None
         flitz_timer = pause_delay
 
     if wicht_line is None and flitz_timer == 0:
         start_x = random.randint(10, WIDTH - 10)
         start_y = random.randint(10, HEIGHT - 10)
-        is_curve = random.choice([True, False])
+
+        is_curve = random.choice([True, False])  # Bogen oder gerade Linie?
 
         if is_curve:
             angle = random.uniform(-0.3, 0.3)
-            length = random.randint(25, 35)
+            length = random.randint(10, 20)
             end_x = start_x + length * math.cos(angle)
             end_y = start_y + length * math.sin(angle)
         else:
             angle = random.uniform(0, 2 * math.pi)
-            length = random.randint(25, 35)
+            length = random.randint(10, 20)
             end_x = start_x + length * math.cos(angle)
             end_y = start_y + length * math.sin(angle)
 
@@ -284,10 +283,11 @@ def update_icon(icon):
         start_x, start_y = wicht_line[0]
         current_end_x = int(wicht_line[1][0] + (start_x - wicht_line[1][0]) * shrink_factor)
         current_end_y = int(wicht_line[1][1] + (start_y - wicht_line[1][1]) * shrink_factor)
-        pygame.draw.line(screen, BLACK, wicht_line[0], (current_end_x, current_end_y), line_thickness)
+        pygame.draw.line(screen, color, wicht_line[0], (current_end_x, current_end_y), 2)
 
     icon.icon = Image.frombytes("RGBA", ICON_SIZE, pygame.image.tostring(screen, "RGBA"))
 
+# --- Menüaktionen ---
 def on_quit(icon, item):
     icon.stop()
 
@@ -303,6 +303,27 @@ def set_mode_ping(icon, item):
     global mode
     mode = 2
 
+def set_color_black(icon, item):
+    global color
+    color = (0, 0, 0)
+
+def set_color_white(icon, item):
+    global color
+    color = (255, 255, 255)
+
+def set_color_orange(icon, item):
+    global color
+    color = (255, 165, 0)
+
+def set_color_green(icon, item):
+    global color
+    color = (0, 255, 0)
+
+def set_color_red(icon, item):
+    global color
+    color = (255, 0, 0)
+
+# --- Steuerung der Pausenzeit ---
 def adjust_flitz_pause():
     global pause_delay
     while True:
@@ -310,39 +331,44 @@ def adjust_flitz_pause():
             pause_delay = random.randint(10, 30)
         elif mode == 1:
             cpu = get_cpu_load()
-            pause_delay = max(3, int(30 - cpu / 3))  # Hohe CPU = weniger Pause
+            pause_delay = max(3, int(30 - cpu / 3))
         elif mode == 2:
             delay = get_ping_delay()
-            pause_delay = int(min(30, max(5, delay * 100)))  # Ping hoch = mehr Pause
+            pause_delay = int(min(30, max(5, delay * 100)))
         time.sleep(1)
 
-# Tray-Menü
-menu = Menu(
-    MenuItem("Zufällig flitzen", set_mode_random),
-    MenuItem("Synchron mit CPU", set_mode_cpu),
-    MenuItem("Synchron mit Ping", set_mode_ping),
+# --- Animation starten ---
+def run_animation():
+    while True:
+        update_icon()
+        time.sleep(0.03)
+
+# --- Menü konfigurieren ---
+color_menu = Menu(
+    MenuItem("Schwarz", set_color_black, checked=lambda item: color == (0, 0, 0)),
+    MenuItem("Weiß", set_color_white, checked=lambda item: color == (255, 255, 255)),
+    MenuItem("Orange", set_color_orange, checked=lambda item: color == (255, 165, 0)),
+    MenuItem("Grün", set_color_green, checked=lambda item: color == (0, 255, 0)),
+    MenuItem("Rot", set_color_red, checked=lambda item: color == (255, 0, 0)),
+)
+
+icon.menu = Menu(
+    MenuItem("Zufällig flitzen", set_mode_random, checked=lambda item: mode == 0),
+    MenuItem("Synchron mit CPU", set_mode_cpu, checked=lambda item: mode == 1),
+    MenuItem("Synchron mit Ping", set_mode_ping, checked=lambda item: mode == 2),
+    Menu.SEPARATOR,
+    MenuItem("Farbe", color_menu),
     Menu.SEPARATOR,
     MenuItem("Beenden", on_quit)
 )
 
-icon = Icon("Wicht", create_image(), menu=menu)
-
-def run_animation():
-    clock = pygame.time.Clock()
-    while True:
-        update_icon(icon)
-        time.sleep(0.03)
-        clock.tick(60)
-
+# --- Starten ---
 def start_icon():
     threading.Thread(target=adjust_flitz_pause, daemon=True).start()
-    icon_thread = threading.Thread(target=icon.run)
-    icon_thread.daemon = True
-    icon_thread.start()
-    run_animation()
+    threading.Thread(target=run_animation, daemon=True).start()
+    icon.run()  # Muss im Hauptthread laufen!
 
 start_icon()
-
 
 
 ###############

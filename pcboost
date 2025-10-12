@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+import curses
+import time
+import random
+import csv
+import os
+import signal
+from collections import deque
+
+# optionaler psutil - falls nicht vorhanden, wird gefallbackt
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except Exception:
+    PSUTIL_AVAILABLE = False
+
+class LernWicht:
+    def __init__(self, width, height, logfile="wichtlog.csv", memfile="wicht_memory.csv"):
+        self.width = max(10, width)
+        self.height = max(6, height)
+        self.x = random.randint(1, self.width-3)
+        self.y = random.randint(1, self.height-3)
+
+        self.shorthistory = deque(maxlen=200)   # Positionen
+        self.cpuhistory = deque(maxlen=60)     # rohe CPU-Werte
+        self.ema_cpu = 0.0                     # exponential moving average
+        self.basespeed = 0.05
+        self.speed = self.basespeed
+        self.logfile = os.path.expanduser(logfile)
+        self.memfile = os.path.expanduser(memfile)
+        self.lastcpu = 0.0
+        self.learnfactor = 1.0
+        self.learnedpattern = []  # liste von (cpu, speed)
+        self.running = True
+
+        self.initlogger()
+        self.loadmemory()
+
+    def initlogger(self):
+        # Erstelle Verzeichnis falls nötig
+        d = os.path.dirname(self.logfile)
+        if d and not os.path.exists(d):
+            try:
+                os.makedirs(d, exist_ok=True)
+            except Exception:
+                pass
+
+        # Header nur hinzufügen, wenn Datei neu/leer ist
+        need_header = True
+        if os.path.exists(self.logfile) and os.path.getsize(self.logfile) > 0:
+            need_header = False
+        try:
+            with open(self.logfile, "a", newline='') as f:
+                writer = csv.writer(f)
+                if need_header:
+                    writer.writerow(["time", "x", "y", "speed", "cpuload"])
+        except Exception as e:
+            # In curses-Kontext wäre ein print schwierig; hier nur pass
+            pass
+
+    def loadmemory(self):
+        if not os.path.exists(self.memfile):
+            return
+        try:
+            with open(self.memfile, "r") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    cpu = float(row.get("cpu", 0.0))
+                    spd = float(row.get("speed", self.basespeed))
+                    self.learnedpattern.append((cpu, spd))
+        except Exception:
+            # falls Datei kaputt ist -> ignorieren
+            self.learnedpattern = []
+            return
+
+        if self.learnedpattern:
+            avgcpu = sum(c for c, _ in self.learnedpattern) / len(self.learnedpattern)
+            avgspeed = sum(s for _, s in self.learnedpattern) / len(self.learnedpattern)
+            # Basisspeed an den historic speed anpassen, begrenzen
+            self.basespeed = max(0.02, min(0.2, avgspeed))
+            # Lernfaktor: bei hoher historischer CPU soll der Wicht stärker reagieren
+            # hier: linearer Verhältnisfaktor, aber begrenzt
+            self.learnfactor = max(0.5, min(5.0, 1.0 + avgcpu / 100.0))
+            # initiale EMA mit historischen Durchschnitt
+            self.ema_cpu = avgcpu
+            # debug
+            # print(f"Memory geladen: basespeed={self.basespeed:.3f}, learnfactor={self.learnfactor:.2f}")
+
+    def savememory(self):
+        # schreibe das gelernte Muster (sample aus cpuhistory + aktuelle speed)
+        try:
+            with open(self.memfile, "w", newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["cpu", "speed"])
+                # schreibe einige repräsentative Paare
+                if self.cpuhistory:
+                    avg = sum(self.cpuhistory) / len(self.cpuhistory)
+                    writer.writerow([round(avg, 2), round(self.basespeed, 4)])
+                for cpu, spd in self.learnedpattern[-200:]:
+                    writer.writerow([round(cpu, 2), round(spd, 4)])
+        except Exception:
+            pass
+
+    def getcpuload(self):
+        try:
+            if PSUTIL_AVAILABLE:
+                # interval=0.0 ist non-blocking und liefert im LOOP brauchbare Werte
+                cpu_percent = psutil.cpu_percent(interval=0.0)
+                self.lastcpu = cpu_percent
+            else:
+                # Fallback: /proc/loadavg (Linux)
+                with open("/proc/loadavg", "r") as f:
+                    load1 = float(f.read().split()[0])
+                    # Normalisiere heuristisch
+                    self.lastcpu = min(100.0, load1 * 100.0)
+        except Exception:
+            # endgültiger Fallback: leichter Zufallswert
+            self.lastcpu = random.uniform(3, 35)
+
+        # Aktualisiere EMA (alpha ~ 0.2)
+        if self.ema_cpu is None:
+            self.ema_cpu = self.lastcpu
+        else:
+            alpha = 0.2
+            self.ema_cpu = alpha * self.lastcpu + (1 - alpha) * self.ema_cpu
+
+        self.cpuhistory.append(self.lastcpu)
+        return self.lastcpu
+
+    def logstate(self):
+        try:
+            with open(self.logfile, "a", newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([time.time(), self.x, self.y, round(self.speed, 4), round(self.lastcpu, 2)])
+        except Exception:
+            pass
+
+    def predictload(self):
+        # gebe EMA zurück wenn vorhanden, sonst Mittelwert der cpuhistory
+        if self.ema_cpu is not None:
+            return self.ema_cpu
+        if not self.cpuhistory:
+            return 20.0
+        return sum(self.cpuhistory) / len(self.cpuhistory)
+
+    def predictspeedfrommemory(self, cpunow):
+        if not self.learnedpattern:
+            return self.basespeed
+        # pick closest CPU sample from memory (k-NN k=1)
+        closest = min(self.learnedpattern, key=lambda x: abs(x[0] - cpunow))
+        return closest[1]
+
+    def flitze(self):
+        # baue eine einfache seltenkeitswahl über shorthistory
+        freqmap = [[0] * self.width for _ in range(self.height)]
+        for hx, hy in self.shorthistory:
+            if 0 <= hy < self.height and 0 <= hx < self.width:
+                freqmap[hy][hx] += 1
+        minfreq = min(min(row) for row in freqmap)
+        rarepositions = [(x, y) for y, row in enumerate(freqmap) for x, f in enumerate(row) if f == minfreq]
+        if rarepositions:
+            self.x, self.y = random.choice(rarepositions)
+
+        cpu = self.getcpuload()
+        predicted = self.predictload()
+
+        learnedspeed = self.predictspeedfrommemory(cpu)
+
+        # faktor skaliert mit geglätteter CPU und learnfactor
+        factor = 1.0 + (predicted / 100.0) * (self.learnfactor - 1.0)
+        # berechne finale speed und begrenze sie
+        self.speed = max(0.01, min(0.5, learnedspeed * factor))
+        self.shorthistory.append((self.x, self.y))
+
+        # optional: erweitere learnedpattern mit exemplarischem Paar (cpu,speed) sporadisch
+        if random.random() < 0.05:
+            self.learnedpattern.append((round(cpu, 2), round(self.speed, 4)))
+
+        self.logstate()
+
+    def flitzebogen(self):
+        dx = random.choice([-1, 0, 1])
+        dy = random.choice([-1, 0, 1])
+        newx = max(1, min(self.width - 2, self.x + dx))
+        newy = max(1, min(self.height - 2, self.y + dy))
+        self.x, self.y = newx, newy
+        return newx, newy
+
+def main(stdscr):
+    # setup curses
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+    curses.start_color()
+    curses.use_default_colors()
+    try:
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)  # status
+    except Exception:
+        pass
+
+    maxy, maxx = stdscr.getmaxyx()
+    wicht = LernWicht(maxx - 1, maxy - 1)
+
+    # signal handler -> sauber speichern
+    def handle_sig(_signum, _frame):
+        wicht.running = False
+    signal.signal(signal.SIGINT, handle_sig)
+    signal.signal(signal.SIGTERM, handle_sig)
+
+    stdscr.clear()
+    stdscr.addstr(0, 0, f"Log-Datei {wicht.logfile}")
+    stdscr.refresh()
+    time.sleep(1)
+
+    tick = 0
+    while wicht.running:
+        tick += 1
+        # Terminal-Größe prüfen (Resize)
+        maxy, maxx = stdscr.getmaxyx()
+        wicht.width = max(10, maxx - 1)
+        wicht.height = max(6, maxy - 1)
+
+        try:
+            key = stdscr.getch()
+        except Exception:
+            key = -1
+
+        if key == ord('q'):
+            break
+
+        if tick % 2 == 0:
+            wicht.flitze()
+        x, y = wicht.flitzebogen()
+
+        stdscr.erase()
+        # Statuszeile
+        status = f"CPU {wicht.lastcpu:5.1f}% EMA {wicht.ema_cpu:5.1f} Speed {wicht.speed:6.3f}s Base {wicht.basespeed:6.3f}s Log {wicht.logfile}"
+        try:
+            stdscr.addstr(0, 0, status[:maxx-1], curses.color_pair(1))
+        except Exception:
+            stdscr.addstr(0, 0, status[:maxx-1])
+
+        # Wicht anzeigen (Backtick)
+        try:
+            stdscr.addstr(y, x, '`')
+        except Exception:
+            # falls koordinaten außerhalb sind, ignoriere
+            pass
+
+        stdscr.refresh()
+        # sleep nach Geschwindigkeit des Wichts
+        time.sleep(wicht.speed)
+
+    # beim Beenden Memory speichern
+    try:
+        wicht.savememory()
+    except Exception:
+        pass
+
+if __name__ == "__main__":
+    curses.wrapper(main)

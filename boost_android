@@ -1,0 +1,286 @@
+import pygame
+import csv
+import os
+import random
+import time
+import math
+import threading
+
+# psutil optional für Termux
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except Exception:
+    PSUTIL_AVAILABLE = False
+
+# ---------------------------------------------
+# WICHT – Lernendes Flitzprogramm
+# ---------------------------------------------
+class WichtLernen:
+    def __init__(self):
+        self.logfile = "wichtlog.csv"
+        self.memfile = "wicht_memory.csv"
+        self.running = True
+        self.memory = []
+        self.avgcpu = 0.0
+        self.avgspeed = 0.0
+        self.lastflitz = 0
+        self.loadmemory()
+
+    # ---------------------------------------------------------
+    #  MEMORY FUNKTIONEN
+    # ---------------------------------------------------------
+    def loadmemory(self):
+        """Lädt komprimierte symbolische Memory-Daten"""
+        if os.path.exists(self.memfile):
+            try:
+                with open(self.memfile, "r") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        cpu = self.decode_value(row["cpu"])
+                        spd = self.decode_value(row["speed"])
+                        if cpu and spd:
+                            self.memory.append((cpu, spd))
+                if self.memory:
+                    cpus, spds = zip(*self.memory)
+                    self.avgcpu = sum(cpus) / len(cpus)
+                    self.avgspeed = sum(spds) / len(spds)
+            except Exception:
+                pass
+
+    def savememory(self):
+        """Komprimiert wichtlog.csv in wicht_memory.csv mit Symbolkodierung"""
+        data = []
+        if os.path.exists(self.logfile):
+            try:
+                with open(self.logfile, "r") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
+                            cpu = float(row["cpuload"])
+                            spd = float(row["speed"])
+                            data.append((cpu, spd))
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+        # Kompression in 50 Blöcke
+        compressed = []
+        if data:
+            chunk_size = max(1, len(data) // 50)
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i:i + chunk_size]
+                avgcpu = sum(c for c, _ in chunk) / len(chunk)
+                avgspeed = sum(s for _, s in chunk) / len(chunk)
+                compressed.append((avgcpu, avgspeed))
+
+        # Symbolische Kodierung
+        def encode_value(v):
+            s = f"{v:.4f}"
+            s = s.replace("0.00", "`")
+            s = s.replace("0.", ",")
+            s = s.replace("1.", "dx")
+            s = s.replace("2.", "dy")
+            s = s.replace("3.", "dz")
+            s = s.replace("4.", "d,")
+            s = s.replace("5.", "d`")
+            s = s.replace("6.", "d-")
+            s = s.replace("7.", "d+")
+            s = s.replace("8.", "d*")
+            s = s.replace("9.", "d/")
+            return s
+
+        try:
+            with open(self.memfile, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["cpu", "speed"])
+                for cpu, spd in compressed[-200:]:
+                    writer.writerow([encode_value(cpu), encode_value(spd)])
+        except Exception:
+            pass
+
+    def decode_value(self, s):
+        """Dekodiert symbolische Zeichen zu Zahlen"""
+        if not s:
+            return None
+        s = s.replace("dx", "1.")
+        s = s.replace("dy", "2.")
+        s = s.replace("dz", "3.")
+        s = s.replace("d,", "4.")
+        s = s.replace("d`", "5.")
+        s = s.replace("d-", "6.")
+        s = s.replace("d+", "7.")
+        s = s.replace("d*", "8.")
+        s = s.replace("d/", "9.")
+        s = s.replace(",", "0.")
+        s = s.replace("`", "0.00")
+        try:
+            return float(s)
+        except Exception:
+            return None
+
+    # ---------------------------------------------------------
+    #  WICHT AKTUALISIERUNG & LOG
+    # ---------------------------------------------------------
+    def log(self, cpu, spd):
+        with open(self.logfile, "a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([time.time(), cpu, spd])
+
+    def update(self):
+        """Hauptlogik: CPU-Last + zufälliger Lernimpuls"""
+        if PSUTIL_AVAILABLE:
+            try:
+                cpu = psutil.cpu_percent()
+            except Exception:
+                cpu = random.uniform(5, 35)
+        else:
+            cpu = random.uniform(5, 35)
+        speed = random.uniform(0.5, 4.0) * (cpu / 100 + 0.5)
+        self.avgcpu = (self.avgcpu * 0.9 + cpu * 0.1)
+        self.avgspeed = (self.avgspeed * 0.9 + speed * 0.1)
+        self.log(cpu, speed)
+        self.lastflitz = time.time()
+        return speed
+
+    # ---------------------------------------------------------
+    #  AUSGABE IN KONSOLE
+    # ---------------------------------------------------------
+    def print_status(self):
+        print("\u001Bc", end="")  # Clear Screen ANSI Escape
+        print("🐾 WICHT-LERNPROGRAMM AKTIV 🧠")
+        print(f"CPU: {self.avgcpu:.2f}% | Speed: {self.avgspeed:.2f}")
+        print(f"Memory-Einträge: {len(self.memory)}")
+        print("-" * 40)
+        preview = []
+        if os.path.exists(self.memfile):
+            with open(self.memfile, "r") as f:
+                lines = f.readlines()[1:8]
+                preview = [l.strip() for l in lines]
+        print("MEMORY-VORSCHAU:")
+        for p in preview:
+            print(" ", p)
+        print("-" * 40)
+        print("Wicht flitzt in eigenem Fenster...")
+
+    def get_status_lines(self):
+        lines = [
+            f"CPU: {self.avgcpu:.2f}%",
+            f"Speed: {self.avgspeed:.2f}",
+            f"Memory-Einträge: {len(self.memory)}",
+            "",
+            "Memory-Vorschau:",
+        ]
+        preview = []
+        if os.path.exists(self.memfile):
+            with open(self.memfile, "r") as f:
+                lines_file = f.readlines()[1:8]
+                preview = [l.strip() for l in lines_file]
+        lines.extend(preview)
+        return lines
+
+# ---------------------------------------------------------
+#  WICHT ZEICHENFENSTER
+# ---------------------------------------------------------
+class WichtFenster:
+    def __init__(self, lernen: WichtLernen):
+        pygame.init()
+        self.lernen = lernen
+        self.size = (400, 300)
+        self.screen = pygame.display.set_mode(self.size)
+        pygame.display.set_caption("Wicht 🖤 Flitzfenster")
+        self.clock = pygame.time.Clock()
+        self.pos = [200, 150]
+        self.target = [200, 150]
+        self.visible = False
+        self.alpha = 255
+        self.timer = 0
+        self.running = True
+
+        # Font für Textanzeige, Größe 18, systemschrift
+        self.font = pygame.font.SysFont(None, 18)
+
+    def flitz(self):
+        """Neuer Zielpunkt + Sichtbarkeit aktivieren"""
+        self.target = [
+            random.randint(20, self.size[0] - 20),
+            random.randint(20, self.size[1] - 20)
+        ]
+        self.visible = True
+        self.alpha = 255
+        self.timer = 0
+
+    def draw_wicht(self):
+        """Zeichnet schwarzen, spitzen Wicht auf weißem Hintergrund"""
+        if not self.visible:
+            return
+        dx = self.target[0] - self.pos[0]
+        dy = self.target[1] - self.pos[1]
+        dist = math.hypot(dx, dy)
+        if dist > 1:
+            self.pos[0] += dx * 0.25
+            self.pos[1] += dy * 0.25
+        else:
+            self.visible = False
+
+        length = max(8, min(30, int(dist / 2)))
+        width = 3
+        angle = math.atan2(dy, dx)
+        x1 = int(self.pos[0] - math.cos(angle) * length)
+        y1 = int(self.pos[1] - math.sin(angle) * length)
+        pygame.draw.line(self.screen, (0, 0, 0), (x1, y1), self.pos, width)
+
+    def draw_status_text(self):
+        lines = self.lernen.get_status_lines()
+        y = 5
+        for line in lines:
+            text_surf = self.font.render(line, True, (0, 0, 0))  # Schwarz
+            self.screen.blit(text_surf, (5, y))
+            y += 20  # Zeilenabstand
+
+    def loop(self):
+        """Haupt-Wicht-Zeichenloop"""
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    self.lernen.running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.running = False
+                        self.lernen.running = False
+
+            self.screen.fill((255, 255, 255))  # Weißer Hintergrund
+
+            now = time.time()
+            if now - self.lernen.lastflitz > random.uniform(0.5, 2.5):
+                self.flitz()
+                self.lernen.lastflitz = now
+
+            self.draw_wicht()
+            self.draw_status_text()  # Statustexte zeichnen
+            pygame.display.flip()
+            self.clock.tick(60)
+
+# ---------------------------------------------------------
+#  MAIN
+# ---------------------------------------------------------
+def main():
+    lernen = WichtLernen()
+
+    def console_loop():
+        while lernen.running:
+            lernen.update()
+            lernen.print_status()
+            lernen.savememory()
+            time.sleep(1.5)
+
+    threading.Thread(target=console_loop, daemon=True).start()
+
+    fenster = WichtFenster(lernen)
+    fenster.loop()
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()

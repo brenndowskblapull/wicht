@@ -1,0 +1,656 @@
+-----
+import pygame, math, time, hashlib, random, sys
+
+pygame.init()
+
+W, H = pygame.display.Info().current_w, pygame.display.Info().current_h
+screen = pygame.display.set_mode((W, H), pygame.FULLSCREEN)
+clock = pygame.time.Clock()
+
+P = [4, 4, 120, 55, 4]
+MIN = [1, 1, 50, 5, 0]
+MAX = [30, 30, 200, 150, 30]
+STEP = [1, 1, 10, 5, 1]
+
+NAMES = [
+    "W-Breite",
+    "W-Länge",
+    "Flitzstrecke",
+    "Flitzgeschwindigkeit",
+    "Krümmung"
+]
+
+BG = (225, 220, 205)
+
+ki = True
+show_ui = True
+next_ki = 0
+
+x, y = W / 2, H / 2
+direction = random.random() * math.tau
+start_direction = direction
+distance = 0
+hidden = 0
+counter = 0
+
+font = pygame.font.SysFont(None, 28)
+small = pygame.font.SysFont(None, 22)
+
+PX, PY, PW, PH = 15, 15, 370, 315
+
+buttons = []
+
+for i in range(5):
+    yy = PY + 45 + i * 42
+    buttons.append((
+        pygame.Rect(PX + 10, yy, 42, 32),
+        pygame.Rect(PX + 315, yy, 42, 32)
+    ))
+
+ki_button = pygame.Rect(PX + 10, PY + 270, 167, 32)
+flitz_button = pygame.Rect(PX + 190, PY + 270, 167, 32)
+
+
+def change(i, v):
+    global ki
+    P[i] = max(MIN[i], min(MAX[i], P[i] + v))
+    ki = False
+
+
+def flitz():
+    global x, y, direction, start_direction, distance, hidden
+    x = random.uniform(0, W)
+    y = random.uniform(0, H)
+    direction = random.random() * math.tau
+    start_direction = direction
+    distance = 0
+    hidden = 0
+
+
+def touch(pos):
+    global ki
+
+    if ki_button.collidepoint(pos):
+        ki = not ki
+        return
+
+    if flitz_button.collidepoint(pos):
+        flitz()
+        return
+
+    for i, (minus, plus) in enumerate(buttons):
+        if minus.collidepoint(pos):
+            change(i, -STEP[i])
+            return
+        if plus.collidepoint(pos):
+            change(i, STEP[i])
+            return
+
+
+def draw_ui():
+    r = pygame.Rect(PX, PY, PW, PH)
+
+    pygame.draw.rect(screen, (238, 234, 220), r, border_radius=8)
+    pygame.draw.rect(screen, (90, 85, 75), r, 2, border_radius=8)
+
+    screen.blit(
+        font.render("WICHT STEUERUNG", True, (20, 20, 20)),
+        (PX + 10, PY + 10)
+    )
+
+    for i, (minus, plus) in enumerate(buttons):
+        pygame.draw.rect(screen, (205, 200, 185), minus, border_radius=5)
+        pygame.draw.rect(screen, (205, 200, 185), plus, border_radius=5)
+
+        screen.blit(
+            font.render("-", True, (20, 20, 20)),
+            (minus.centerx - 5, minus.centery - 12)
+        )
+
+        screen.blit(
+            font.render("+", True, (20, 20, 20)),
+            (plus.centerx - 7, plus.centery - 12)
+        )
+
+        screen.blit(
+            small.render(NAMES[i], True, (20, 20, 20)),
+            (PX + 62, minus.centery - 9)
+        )
+
+        screen.blit(
+            font.render(str(P[i]), True, (20, 20, 20)),
+            (PX + 270, minus.centery - 12)
+        )
+
+    pygame.draw.rect(
+        screen,
+        (170, 165, 150) if ki else (205, 200, 185),
+        ki_button,
+        border_radius=5
+    )
+
+    pygame.draw.rect(
+        screen,
+        (190, 175, 145),
+        flitz_button,
+        border_radius=5
+    )
+
+    t = font.render("KI: AN" if ki else "KI: AUS", True, (20, 20, 20))
+    screen.blit(
+        t,
+        (
+            ki_button.centerx - t.get_width() // 2,
+            ki_button.centery - t.get_height() // 2
+        )
+    )
+
+    t = font.render("FLITZ", True, (20, 20, 20))
+    screen.blit(
+        t,
+        (
+            flitz_button.centerx - t.get_width() // 2,
+            flitz_button.centery - t.get_height() // 2
+        )
+    )
+
+
+running = True
+
+while running:
+
+    for e in pygame.event.get():
+
+        if e.type == pygame.QUIT:
+            running = False
+
+        elif e.type == pygame.KEYDOWN:
+
+            if e.key == pygame.K_ESCAPE:
+                running = False
+
+            elif e.key == pygame.K_TAB:
+                show_ui = not show_ui
+
+            elif e.key == pygame.K_SPACE:
+                flitz()
+
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            touch(e.pos)
+
+    now = time.time()
+
+    d = hashlib.sha256(
+        f"{counter}{time.time_ns()}".encode()
+    ).digest()
+
+    counter = (
+        counter +
+        int.from_bytes(d[:8], "big")
+    ) & 0xffffffffffffffff
+
+    if ki and now >= next_ki:
+        P[0] = 2 + d[0] % 9
+        P[1] = 2 + d[1] % 9
+        P[2] = 50 + d[2] % 151
+        P[3] = 35 + d[3] % 116
+        P[4] = d[4] % 16
+
+        next_ki = now + random.uniform(.15, .45)
+
+    width, height, flight, speed, curve = P
+
+    if hidden:
+        hidden -= 1
+
+    else:
+
+        if distance >= flight:
+            hidden = random.randint(2, 6)
+            flitz()
+
+        progress = distance / max(flight, 1)
+
+        direction = (
+            start_direction +
+            math.radians(curve) * progress
+        )
+
+        step = min(
+            speed,
+            flight - distance
+        )
+
+        x += math.cos(direction) * step
+        y += math.sin(direction) * step
+
+        x %= W
+        y %= H
+
+        distance += step
+
+    screen.fill(BG)
+
+    if not hidden:
+
+        progress = min(
+            distance / max(flight, 1),
+            1
+        )
+
+        bw = max(
+            1,
+            int(width * (1 - progress))
+        )
+
+        bh = max(
+            1,
+            int(height * (1 - progress))
+        )
+
+        cx, cy = int(x), int(y)
+
+        w = max(1, bw - 2)
+        h = max(1, bh - 2)
+
+        pygame.draw.rect(
+            screen,
+            (160, 160, 160),
+            (
+                cx - w // 2,
+                cy - h // 2,
+                w,
+                h
+            )
+        )
+
+        w = max(1, bw - 1)
+        h = max(1, bh - 1)
+
+        pygame.draw.rect(
+            screen,
+            (80, 80, 80),
+            (
+                cx - w // 2,
+                cy - h // 2,
+                w,
+                h
+            )
+        )
+
+        pygame.draw.rect(
+            screen,
+            (0, 0, 0),
+            (
+                cx - bw // 2,
+                cy - bh // 2,
+                bw,
+                bh
+            )
+        )
+
+    if show_ui:
+        draw_ui()
+
+    pygame.display.flip()
+    clock.tick(144)
+
+pygame.quit()
+sys.exit()
+----
+
+import pygame
+import math
+import time
+import random
+import sys
+
+pygame.init()
+
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.display.set_caption("Wicht – Training")
+
+WIDTH, HEIGHT = screen.get_size()
+
+clock = pygame.time.Clock()
+
+
+WICHT_LENGTH = 25.0
+WICHT_SPEED = 0.7
+WICHT_WIDTH = 1.4
+
+MAX_FLIGHT_DISTANCE = 300.0
+
+CURVE_AMOUNT = 150.0
+CURVE_PROBABILITY = 0.30
+
+APPEAR_MAX = 1.0
+APPEAR_MIN = 0.03
+
+SHRINK_MAX = 1.0
+SHRINK_MIN = 0.08
+
+BACKGROUND = (235, 232, 225)
+
+ARC_SAMPLES = 400
+TAIL_SAMPLES = 100
+
+TARGET_FPS = 240
+
+PAUSE_BETWEEN_WICHTS = 0.80
+
+def smoothstep(x):
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def appear_factor(t):
+
+    if t < 0.5:
+        x = t / 0.5
+    else:
+        x = (1.0 - t) / 0.5
+
+    x = smoothstep(x)
+
+    return APPEAR_MIN + (APPEAR_MAX - APPEAR_MIN) * x
+
+
+def shrink_factor(t):
+
+    if t < 0.5:
+        x = t / 0.5
+    else:
+        x = (1.0 - t) / 0.5
+
+    x = smoothstep(x)
+
+    return SHRINK_MIN + (SHRINK_MAX - SHRINK_MIN) * x
+
+class Wicht:
+
+    def __init__(self):
+
+        self.start = pygame.Vector2(
+            random.uniform(0, WIDTH),
+            random.uniform(0, HEIGHT)
+        )
+
+        angle = random.uniform(0.0, math.tau)
+
+        distance = random.uniform(
+            WICHT_LENGTH * 4.0,
+            MAX_FLIGHT_DISTANCE
+        )
+
+        self.end = self.start + pygame.Vector2(
+            math.cos(angle) * distance,
+            math.sin(angle) * distance
+        )
+
+        self.end.x = max(0, min(WIDTH, self.end.x))
+        self.end.y = max(0, min(HEIGHT, self.end.y))
+
+        self.curved = random.random() < CURVE_PROBABILITY
+
+        if self.curved:
+
+            midpoint = (self.start + self.end) * 0.5
+
+            direction = self.end - self.start
+
+            if direction.length_squared() > 0:
+                normal = pygame.Vector2(
+                    -direction.y,
+                    direction.x
+                ).normalize()
+            else:
+                normal = pygame.Vector2(0, 1)
+
+            offset = random.choice([-1, 1]) * CURVE_AMOUNT
+
+            self.control = midpoint + normal * offset
+
+        else:
+            self.control = None
+
+        self.arc_t = []
+        self.arc_distance = []
+
+        previous = self.position_raw(0.0)
+
+        total = 0.0
+
+        self.arc_t.append(0.0)
+        self.arc_distance.append(0.0)
+
+        for i in range(1, ARC_SAMPLES + 1):
+
+            t = i / ARC_SAMPLES
+
+            current = self.position_raw(t)
+
+            total += current.distance_to(previous)
+
+            self.arc_t.append(t)
+            self.arc_distance.append(total)
+
+            previous = current
+
+        self.path_length = total
+
+        self.duration = (
+            self.path_length /
+            (650.0 * WICHT_SPEED)
+        )
+
+        self.duration = max(0.08, self.duration)
+
+        self.start_time = time.perf_counter()
+
+    def position_raw(self, t):
+
+        t = max(0.0, min(1.0, t))
+
+        if not self.curved:
+
+            return self.start.lerp(self.end, t)
+
+        u = 1.0 - t
+
+        return (
+            self.start * (u * u)
+            + self.control * (2.0 * u * t)
+            + self.end * (t * t)
+        )
+
+    def t_from_distance(self, distance):
+
+        if distance <= 0:
+            return 0.0
+
+        if distance >= self.path_length:
+            return 1.0
+
+        low = 0
+        high = len(self.arc_distance) - 1
+
+        while low < high:
+
+            mid = (low + high) // 2
+
+            if self.arc_distance[mid] < distance:
+                low = mid + 1
+            else:
+                high = mid
+
+        i = max(1, low)
+
+        d0 = self.arc_distance[i - 1]
+        d1 = self.arc_distance[i]
+
+        t0 = self.arc_t[i - 1]
+        t1 = self.arc_t[i]
+
+        if d1 == d0:
+            return t0
+
+        factor = (distance - d0) / (d1 - d0)
+
+        return t0 + (t1 - t0) * factor
+
+    def position(self, t):
+
+        distance = self.path_length * t
+
+        path_t = self.t_from_distance(distance)
+
+        return self.position_raw(path_t)
+
+wicht = Wicht()
+
+next_spawn_time = 0.0
+
+running = True
+
+while running:
+
+    now = time.perf_counter()
+
+    for event in pygame.event.get():
+
+        if event.type == pygame.QUIT:
+            running = False
+
+        elif event.type == pygame.KEYDOWN:
+
+            if event.key == pygame.K_ESCAPE:
+                running = False
+
+    elapsed = now - wicht.start_time
+
+    t = elapsed / wicht.duration
+
+    if t >= 1.0:
+
+        if now >= next_spawn_time:
+
+            wicht = Wicht()
+
+            next_spawn_time = (
+                now +
+                PAUSE_BETWEEN_WICHTS
+            )
+
+            wicht.start_time = (
+                now +
+                PAUSE_BETWEEN_WICHTS
+            )
+
+    if now < next_spawn_time:
+
+        screen.fill(BACKGROUND)
+
+        pygame.display.flip()
+
+        clock.tick(TARGET_FPS)
+
+        continue
+
+    elapsed = now - wicht.start_time
+
+    t = elapsed / wicht.duration
+
+    t = max(0.0, min(1.0, t))
+
+    appear = appear_factor(t)
+
+    shrink = shrink_factor(t)
+
+    current_position = wicht.position(t)
+
+    points = []
+
+    tail_distance = (
+        WICHT_LENGTH *
+        shrink
+    )
+
+
+    for i in range(TAIL_SAMPLES):
+
+        factor = i / (TAIL_SAMPLES - 1)
+
+        distance = (
+            tail_distance *
+            factor
+        )
+
+        back_distance = (
+            self_distance := distance
+        )
+
+        flight_distance = (
+            wicht.path_length * t
+        )
+
+        point_distance = max(
+            0.0,
+            flight_distance - back_distance
+        )
+
+        tail_t = wicht.t_from_distance(
+            point_distance
+        )
+
+        point = wicht.position_raw(tail_t)
+
+        points.append(point)
+
+    screen.fill(BACKGROUND)
+
+
+    if len(points) >= 2:
+
+        for i in range(len(points) - 1):
+
+            p1 = points[i]
+            p2 = points[i + 1]
+
+            fade = i / (len(points) - 1)
+
+            alpha = (
+                appear *
+                (1.0 - fade)
+            )
+
+            value = int(
+                30 +
+                180 * alpha
+            )
+
+            value = max(0, min(255, value))
+
+            width = max(
+                1,
+                int(
+                    WICHT_WIDTH *
+                    shrink *
+                    (1.0 - fade * 0.35)
+                )
+            )
+
+            pygame.draw.line(
+                screen,
+                (value, value, value),
+                p1,
+                p2,
+                width
+            )
+
+    pygame.display.flip()
+
+    clock.tick_busy_loop(TARGET_FPS)
+
+pygame.quit()
+sys.exit()
